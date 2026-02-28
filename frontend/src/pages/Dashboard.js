@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
 
 const Dashboard = ({ user, setUser }) => {
@@ -16,9 +16,6 @@ const Dashboard = ({ user, setUser }) => {
     totalLinks: 0,
     popularLinks: []
   });
-  const [previewLink, setPreviewLink] = useState(null);
-  const [newTag, setNewTag] = useState('');
-  const [editingLink, setEditingLink] = useState(null);
   
   const navigate = useNavigate();
   const token = localStorage.getItem('token');
@@ -46,34 +43,42 @@ const Dashboard = ({ user, setUser }) => {
     
     // Filter by search term
     if (searchTerm) {
+      const term = searchTerm.toLowerCase();
       filtered = filtered.filter(link => 
-        link.originalUrl.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        link.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        link.category?.toLowerCase().includes(searchTerm.toLowerCase())
+        link.originalUrl.toLowerCase().includes(term) ||
+        link.title?.toLowerCase().includes(term) ||
+        link.category?.toLowerCase().includes(term) ||
+        link.shortUrl?.toLowerCase().includes(term) ||
+        link.tags?.some(tag => tag.toLowerCase().includes(term))
       );
     }
     
     setFilteredLinks(filtered);
   }, [links, selectedCategory, selectedTags, searchTerm]);
 
-  // US3 & US5: Fetch all links and analytics
+  // Fetch links function
   const fetchLinks = async () => {
     try {
+      const token = localStorage.getItem('token');
       const headers = { Authorization: `Bearer ${token}` };
-      const response = await axios.get('http://localhost:5000/api/links', { headers });
+      
+      const response = await axios.get('http://localhost:5000/api/urls/user/me', { headers });
       
       const linksData = response.data;
-      setLinks(linksData);
+      console.log('Fetched links:', linksData);
       
-      // Extract unique categories (US6)
+      setLinks(linksData);
+      setFilteredLinks(linksData);
+      
+      // Extract unique categories
       const uniqueCategories = [...new Set(linksData.map(link => link.category).filter(Boolean))];
       setCategories(uniqueCategories);
       
-      // Extract all tags (US8)
+      // Extract all tags
       const tags = [...new Set(linksData.flatMap(link => link.tags || []))];
       setAllTags(tags);
       
-      // Calculate statistics (US5)
+      // Calculate statistics
       const totalClicks = linksData.reduce((sum, link) => sum + (link.clicks || 0), 0);
       const popular = [...linksData].sort((a, b) => (b.clicks || 0) - (a.clicks || 0)).slice(0, 5);
       
@@ -90,91 +95,9 @@ const Dashboard = ({ user, setUser }) => {
     }
   };
 
-  // US7: Get analytics for a specific link
+  // View analytics
   const viewAnalytics = (linkId) => {
     navigate(`/analytics/${linkId}`);
-  };
-
-  // US6: Auto-categorize link (call backend AI)
-  const autoCategorize = async (linkId) => {
-    try {
-      const headers = { Authorization: `Bearer ${token}` };
-      const response = await axios.post(
-        `http://localhost:5000/api/links/${linkId}/categorize`,
-        {},
-        { headers }
-      );
-      
-      // Update the link with new category
-      setLinks(links.map(link => 
-        link._id === linkId ? { ...link, category: response.data.category } : link
-      ));
-      
-      alert(`Link categorized as: ${response.data.category}`);
-    } catch (err) {
-      console.error('Error categorizing link:', err);
-    }
-  };
-
-  // US8: Add tag to link
-  const addTag = async (linkId, tag) => {
-    if (!tag.trim()) return;
-    
-    try {
-      const headers = { Authorization: `Bearer ${token}` };
-      const response = await axios.post(
-        `http://localhost:5000/api/links/${linkId}/tags`,
-        { tag },
-        { headers }
-      );
-      
-      // Update the link with new tags
-      setLinks(links.map(link => 
-        link._id === linkId ? { ...link, tags: response.data.tags } : link
-      ));
-      
-      // Update all tags list
-      const updatedTags = [...new Set([...allTags, tag])];
-      setAllTags(updatedTags);
-      
-      setNewTag('');
-      setEditingLink(null);
-    } catch (err) {
-      console.error('Error adding tag:', err);
-    }
-  };
-
-  // US8: Remove tag from link
-  const removeTag = async (linkId, tagToRemove) => {
-    try {
-      const headers = { Authorization: `Bearer ${token}` };
-      const response = await axios.delete(
-        `http://localhost:5000/api/links/${linkId}/tags/${tagToRemove}`,
-        { headers }
-      );
-      
-      // Update the link
-      setLinks(links.map(link => 
-        link._id === linkId ? { ...link, tags: response.data.tags } : link
-      ));
-    } catch (err) {
-      console.error('Error removing tag:', err);
-    }
-  };
-
-  // US9: Get link preview
-  const fetchPreview = async (linkId) => {
-    try {
-      const headers = { Authorization: `Bearer ${token}` };
-      const response = await axios.get(
-        `http://localhost:5000/api/links/${linkId}/preview`,
-        { headers }
-      );
-      
-      setPreviewLink(response.data);
-    } catch (err) {
-      console.error('Error fetching preview:', err);
-    }
   };
 
   // Delete link
@@ -198,6 +121,27 @@ const Dashboard = ({ user, setUser }) => {
     navigate('/');
   };
 
+  // Navigate to home page to shorten new link
+  const goToShorten = () => {
+    navigate('/');
+  };
+
+  // Clear all filters
+  const clearFilters = () => {
+    setSelectedCategory('all');
+    setSearchTerm('');
+    setSelectedTags([]);
+  };
+
+  // Toggle tag selection
+  const toggleTag = (tag) => {
+    setSelectedTags(prev =>
+      prev.includes(tag)
+        ? prev.filter(t => t !== tag)
+        : [...prev, tag]
+    );
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -212,7 +156,7 @@ const Dashboard = ({ user, setUser }) => {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Navigation */}
-      <nav className="bg-white shadow-sm">
+      <nav className="bg-white shadow-sm sticky top-0 z-10">
         <div className="container mx-auto px-4 py-3 flex justify-between items-center">
           <h1 className="text-2xl font-bold text-gray-800">My Links</h1>
           <div className="flex items-center space-x-4">
@@ -228,7 +172,23 @@ const Dashboard = ({ user, setUser }) => {
       </nav>
 
       <div className="container mx-auto px-4 py-8">
-        {/* Stats Overview (US5) */}
+        {/* Permanent Shorten Button Section */}
+        <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg shadow-lg p-6 mb-8 text-white">
+          <div className="flex flex-col md:flex-row items-center justify-between">
+            <div className="mb-4 md:mb-0">
+              <h2 className="text-2xl font-bold mb-2">Want to shorten another link?</h2>
+              <p className="text-blue-100">Create short, trackable links in seconds</p>
+            </div>
+            <button
+              onClick={goToShorten}
+              className="bg-white text-blue-600 px-8 py-3 rounded-lg font-semibold hover:bg-blue-50 transition-colors shadow-md"
+            >
+              ✂️ Shorten New Link
+            </button>
+          </div>
+        </div>
+
+        {/* Stats Overview */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <div className="bg-white rounded-lg shadow p-6">
             <h3 className="text-gray-500 text-sm uppercase">Total Links</h3>
@@ -240,33 +200,59 @@ const Dashboard = ({ user, setUser }) => {
           </div>
           <div className="bg-white rounded-lg shadow p-6">
             <h3 className="text-gray-500 text-sm uppercase">Popular Link</h3>
-            <p className="text-lg font-semibold text-gray-800 truncate">
-              {stats.popularLinks[0]?.originalUrl || 'No clicks yet'}
-            </p>
-            <p className="text-sm text-gray-500">
-              {stats.popularLinks[0]?.clicks || 0} clicks
-            </p>
+            {stats.popularLinks && stats.popularLinks.length > 0 ? (
+              <>
+                <p className="text-lg font-semibold text-gray-800 truncate" title={stats.popularLinks[0]?.originalUrl}>
+                  {stats.popularLinks[0]?.originalUrl || 'No links'}
+                </p>
+                <p className="text-sm text-gray-500">
+                  {stats.popularLinks[0]?.clicks || 0} clicks
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-lg font-semibold text-gray-400">No clicks yet</p>
+                <p className="text-sm text-gray-400">Create and share links</p>
+              </>
+            )}
           </div>
         </div>
 
-        {/* Filters Section */}
+        {/* Filters Section - Side by Side */}
         <div className="bg-white rounded-lg shadow p-6 mb-8">
-          <h2 className="text-xl font-semibold mb-4">Filter Links</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Search */}
-            <div>
+          <div className="flex flex-col md:flex-row md:items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold">Filter Links</h2>
+            {(selectedCategory !== 'all' || searchTerm || selectedTags.length > 0) && (
+              <button
+                onClick={clearFilters}
+                className="text-sm text-blue-500 hover:text-blue-700 mt-2 md:mt-0"
+              >
+                Clear all filters
+              </button>
+            )}
+          </div>
+          
+          {/* Side by Side Filters */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            {/* Search Bar */}
+            <div className="col-span-1">
               <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
-              <input
-                type="text"
-                placeholder="Search URLs or titles..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Search URLs, tags..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full px-4 py-2 pl-10 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+                <svg className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </div>
             </div>
 
-            {/* Category Filter (US6) */}
-            <div>
+            {/* Category Filter */}
+            <div className="col-span-1">
               <label className="block text-sm font-medium text-gray-700 mb-2">Category</label>
               <select
                 value={selectedCategory}
@@ -280,222 +266,204 @@ const Dashboard = ({ user, setUser }) => {
               </select>
             </div>
 
-            {/* Tags Filter (US8) */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Filter by Tags</label>
-              <div className="flex flex-wrap gap-2">
-                {allTags.map(tag => (
-                  <button
-                    key={tag}
-                    onClick={() => {
-                      setSelectedTags(prev =>
-                        prev.includes(tag)
-                          ? prev.filter(t => t !== tag)
-                          : [...prev, tag]
-                      );
-                    }}
-                    className={`px-3 py-1 rounded-full text-sm ${
-                      selectedTags.includes(tag)
-                        ? 'bg-blue-500 text-white'
-                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                    }`}
-                  >
-                    {tag}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Links Grid (US3) */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredLinks.map(link => (
-            <div key={link._id} className="bg-white rounded-lg shadow overflow-hidden">
-              {/* Link Preview Image (US9) */}
-              {link.previewImage && (
-                <img 
-                  src={link.previewImage} 
-                  alt={link.title || 'Link preview'}
-                  className="w-full h-32 object-cover"
-                />
+            {/* Tags Filter - Simplified for side by side */}
+            <div className="col-span-1">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Tags {selectedTags.length > 0 && `(${selectedTags.length} selected)`}
+              </label>
+              {allTags.length > 0 ? (
+                <select
+                  value=""
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      toggleTag(e.target.value);
+                    }
+                  }}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="">Select tags to filter</option>
+                  {allTags.map(tag => (
+                    <option key={tag} value={tag}>
+                      {tag} {selectedTags.includes(tag) ? '✓' : ''}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <p className="text-sm text-gray-400 py-2">No tags available</p>
               )}
-              
-              <div className="p-4">
-                {/* Title and URL */}
-                <h3 className="font-semibold text-gray-800 mb-1 truncate">
-                  {link.title || link.originalUrl}
-                </h3>
-                <a 
-                  href={link.originalUrl} 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="text-sm text-blue-500 hover:underline truncate block mb-2"
-                >
-                  {link.originalUrl}
-                </a>
-                
-                {/* Short URL */}
-                <div className="bg-gray-50 p-2 rounded mb-3">
-                  <p className="text-xs text-gray-500">Short URL:</p>
-                  <a 
-                    href={`http://localhost:5000/${link.shortUrl}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sm text-green-600 hover:underline"
-                  >
-                    {link.shortUrl}
-                  </a>
-                </div>
-
-                {/* Category (US6) */}
-                <div className="mb-2">
-                  {link.category ? (
-                    <span className="inline-block bg-purple-100 text-purple-800 text-xs px-2 py-1 rounded">
-                      {link.category}
-                    </span>
-                  ) : (
-                    <button
-                      onClick={() => autoCategorize(link._id)}
-                      className="text-xs text-blue-500 hover:underline"
-                    >
-                      + Auto-categorize
-                    </button>
-                  )}
-                </div>
-
-                {/* Tags (US8) */}
-                <div className="mb-3">
-                  <div className="flex flex-wrap gap-1 mb-2">
-                    {link.tags?.map(tag => (
-                      <span
-                        key={tag}
-                        className="inline-flex items-center bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded"
-                      >
-                        {tag}
-                        <button
-                          onClick={() => removeTag(link._id, tag)}
-                          className="ml-1 text-blue-600 hover:text-blue-800"
-                        >
-                          ×
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                  
-                  {editingLink === link._id ? (
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={newTag}
-                        onChange={(e) => setNewTag(e.target.value)}
-                        placeholder="New tag"
-                        className="flex-1 text-sm px-2 py-1 border rounded"
-                        onKeyPress={(e) => e.key === 'Enter' && addTag(link._id, newTag)}
-                      />
-                      <button
-                        onClick={() => addTag(link._id, newTag)}
-                        className="text-xs bg-green-500 text-white px-2 py-1 rounded"
-                      >
-                        Add
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => setEditingLink(link._id)}
-                      className="text-xs text-gray-500 hover:text-gray-700"
-                    >
-                      + Add tag
-                    </button>
-                  )}
-                </div>
-
-                {/* Stats and Actions */}
-                <div className="flex items-center justify-between mt-3 pt-3 border-t">
-                  <div className="text-sm text-gray-600">
-                    <span className="font-semibold">{link.clicks || 0}</span> clicks
-                  </div>
-                  
-                  <div className="flex space-x-2">
-                    {/* Preview Button (US9) */}
-                    <button
-                      onClick={() => fetchPreview(link._id)}
-                      className="text-gray-500 hover:text-gray-700"
-                      title="Preview"
-                    >
-                      👁️
-                    </button>
-                    
-                    {/* Analytics Button (US7) */}
-                    <button
-                      onClick={() => viewAnalytics(link._id)}
-                      className="text-blue-500 hover:text-blue-700"
-                      title="Analytics"
-                    >
-                      📊
-                    </button>
-                    
-                    {/* Delete Button */}
-                    <button
-                      onClick={() => deleteLink(link._id)}
-                      className="text-red-500 hover:text-red-700"
-                      title="Delete"
-                    >
-                      🗑️
-                    </button>
-                  </div>
-                </div>
-              </div>
             </div>
-          ))}
+          </div>
+
+          {/* Selected Tags Display */}
+          {selectedTags.length > 0 && (
+            <div className="flex flex-wrap gap-2 items-center mt-2">
+              <span className="text-sm text-gray-500">Active tag filters:</span>
+              {selectedTags.map(tag => (
+                <span
+                  key={tag}
+                  onClick={() => toggleTag(tag)}
+                  className="inline-flex items-center bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full cursor-pointer hover:bg-blue-200"
+                >
+                  {tag}
+                  <svg className="w-3 h-3 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Results count */}
+          <div className="mt-4 text-sm text-gray-500 border-t pt-4">
+            Showing {filteredLinks.length} of {links.length} links
+          </div>
         </div>
 
-        {/* No Links Message */}
-        {filteredLinks.length === 0 && (
-          <div className="text-center py-12">
-            <p className="text-gray-500 text-lg">No links found</p>
-            <a href="/" className="text-blue-500 hover:underline mt-2 inline-block">
-              Shorten your first link
-            </a>
-          </div>
-        )}
-
-        {/* Preview Modal (US9) */}
-        {previewLink && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-              <div className="p-6">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-xl font-bold">Link Preview</h3>
-                  <button
-                    onClick={() => setPreviewLink(null)}
-                    className="text-gray-500 hover:text-gray-700"
-                  >
-                    ✕
-                  </button>
-                </div>
-                
-                {previewLink.image && (
-                  <img 
-                    src={previewLink.image} 
-                    alt={previewLink.title}
-                    className="w-full h-48 object-cover rounded-lg mb-4"
-                  />
-                )}
-                
-                <h4 className="text-lg font-semibold mb-2">{previewLink.title}</h4>
-                <p className="text-gray-600 mb-4">{previewLink.description}</p>
-                
-                <a 
-                  href={previewLink.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-500 hover:underline break-all"
-                >
-                  {previewLink.url}
-                </a>
-              </div>
+        {/* Links List View */}
+        {filteredLinks.length > 0 ? (
+          <div className="bg-white rounded-lg shadow overflow-hidden">
+            {/* Table Header - Hidden on mobile */}
+            <div className="hidden md:grid md:grid-cols-12 bg-gray-50 px-4 py-3 text-sm font-medium text-gray-500 border-b">
+              <div className="col-span-4">Original URL</div>
+              <div className="col-span-3">Short URL</div>
+              <div className="col-span-2">Category / Tags</div>
+              <div className="col-span-2">Created</div>
+              <div className="col-span-1 text-center">Clicks</div>
             </div>
+
+            {/* Links List */}
+            <div className="divide-y divide-gray-200">
+              {filteredLinks.map(link => (
+                <div key={link._id} className="p-4 hover:bg-gray-50 transition">
+                  {/* Mobile View */}
+                  <div className="md:hidden space-y-2">
+                    <div className="flex justify-between items-start">
+                      <a 
+                        href={link.originalUrl} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-blue-600 hover:underline font-medium text-sm truncate max-w-[200px]"
+                        title={link.originalUrl}
+                      >
+                        {link.originalUrl}
+                      </a>
+                      <span className="bg-blue-100 text-blue-800 text-xs font-semibold px-2 py-1 rounded">
+                        {link.clicks || 0} clicks
+                      </span>
+                    </div>
+                    
+                    <div className="text-sm">
+                      <span className="text-gray-500">Short: </span>
+                      <a 
+                        href={`http://localhost:5000/api/urls/${link.shortUrl}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-green-600 hover:underline font-mono text-xs"
+                      >
+                        {link.shortUrl}
+                      </a>
+                    </div>
+
+                    <div className="flex flex-wrap gap-1">
+                      {link.category && (
+                        <span className="bg-purple-100 text-purple-800 text-xs px-2 py-1 rounded">
+                          {link.category}
+                        </span>
+                      )}
+                      {link.tags?.map(tag => (
+                        <span key={tag} className="bg-gray-100 text-gray-800 text-xs px-2 py-1 rounded">
+                          #{tag}
+                        </span>
+                      ))}
+                    </div>
+
+                    <div className="flex justify-between items-center pt-2">
+                      <span className="text-xs text-gray-500">
+                        {new Date(link.createdAt).toLocaleDateString()}
+                      </span>
+                      <div className="flex space-x-3">
+                        <button
+                          onClick={() => viewAnalytics(link._id)}
+                          className="text-blue-500 hover:text-blue-700 text-sm"
+                        >
+                          📊 Analytics
+                        </button>
+                        <button
+                          onClick={() => deleteLink(link._id)}
+                          className="text-red-500 hover:text-red-700 text-sm"
+                        >
+                          🗑️ Delete
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Desktop View */}
+                  <div className="hidden md:grid md:grid-cols-12 items-center text-sm">
+                    <div className="col-span-4 truncate pr-2" title={link.originalUrl}>
+                      <a 
+                        href={link.originalUrl} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-blue-600 hover:underline"
+                      >
+                        {link.originalUrl}
+                      </a>
+                    </div>
+                    
+                    <div className="col-span-3">
+                      <a 
+                        href={`http://localhost:5000/api/urls/${link.shortUrl}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-green-600 hover:underline font-mono text-xs"
+                      >
+                        {link.shortUrl}
+                      </a>
+                    </div>
+                    
+                    <div className="col-span-2">
+                      <div className="flex flex-wrap gap-1">
+                        {link.category && (
+                          <span className="bg-purple-100 text-purple-800 text-xs px-2 py-1 rounded">
+                            {link.category}
+                          </span>
+                        )}
+                        {link.tags?.slice(0, 2).map(tag => (
+                          <span key={tag} className="bg-gray-100 text-gray-800 text-xs px-2 py-1 rounded">
+                            #{tag}
+                          </span>
+                        ))}
+                        {link.tags?.length > 2 && (
+                          <span className="text-xs text-gray-500">
+                            +{link.tags.length - 2}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    
+                    <div className="col-span-2 text-gray-500 text-xs">
+                      {new Date(link.createdAt).toLocaleDateString()}
+                    </div>
+                    
+                    <div className="col-span-1 text-center font-semibold">
+                      {link.clicks || 0}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="bg-white rounded-lg shadow p-12 text-center">
+            <p className="text-gray-500 text-lg mb-2">No links found</p>
+            <p className="text-gray-400 text-sm mb-4">Try adjusting your filters or create a new link</p>
+            <button
+              onClick={clearFilters}
+              className="text-blue-500 hover:text-blue-700"
+            >
+              Clear filters
+            </button>
           </div>
         )}
       </div>

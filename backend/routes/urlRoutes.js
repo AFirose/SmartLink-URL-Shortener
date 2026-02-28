@@ -1,15 +1,15 @@
 import express from "express";
 import { shortenUrl, getUrl, getUserUrls, getAllUrls } from "../controllers/urlController.js";
-import { protect, admin } from "../middleware/admin.js";  // Make sure this path is correct
+import { protect, admin } from "../middleware/admin.js";
 
 const router = express.Router();
 
-// Public routes - no authentication needed
-router.post("/shorten", shortenUrl);  // Create short URL
-router.get("/:shortCode", getUrl);    // Redirect to original URL
+// Public routes
+router.get("/:shortCode", getUrl);
 
 // Protected routes - require authentication
-router.get("/user/me", protect, getUserUrls);        // Get user's URLs
-router.get("/admin/all", protect, admin, getAllUrls); // Admin get all URLs
+router.post("/shorten", protect, shortenUrl);  // ✅ Must have 'protect'
+router.get("/user/me", protect, getUserUrls);
+router.get("/admin/all", protect, admin, getAllUrls);
 
 export default router;

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 
-const ShortenForm = ({ user }) => {
+const ShortenForm = ({ user, onLinkCreated }) => {
   const [url, setUrl] = useState('');
   const [shortUrl, setShortUrl] = useState('');
   const [loading, setLoading] = useState(false);
@@ -30,9 +30,16 @@ const ShortenForm = ({ user }) => {
     setCopied(false);
 
     try {
+      const token = localStorage.getItem('token'); // ✅ Get token
+      
       const response = await axios.post(
         'http://localhost:5000/api/urls/shorten',
-        { originalUrl: url }
+        { originalUrl: url },
+        { 
+          headers: { 
+            Authorization: `Bearer ${token}` // ✅ Send token with request
+          } 
+        }
       );
 
       const baseUrl = 'http://localhost:5000';
@@ -40,9 +47,18 @@ const ShortenForm = ({ user }) => {
       
       setShortUrl(fullShortUrl);
       setUrl('');
+      
+      // Callback to refresh dashboard if provided
+      if (onLinkCreated) {
+        onLinkCreated();
+      }
     } catch (err) {
       console.error('Shorten error:', err);
-      setError(err.response?.data?.message || 'Failed to shorten URL. Please try again.');
+      if (err.response?.status === 401) {
+        setError('Please login to shorten URLs');
+      } else {
+        setError(err.response?.data?.message || 'Failed to shorten URL. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
@@ -52,12 +68,6 @@ const ShortenForm = ({ user }) => {
     navigator.clipboard.writeText(shortUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-  };
-
-  const handleKeyPress = (e) => {
-    if (e.key === 'Enter' && !loading) {
-      handleSubmit(e);
-    }
   };
 
   return (
@@ -72,14 +82,12 @@ const ShortenForm = ({ user }) => {
             type="url"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
-            onKeyPress={handleKeyPress}
             placeholder="Enter your long URL here..."
             className="flex-1 px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition"
             disabled={loading}
             autoFocus
           />
           
-          {/* BUTTON WITH CYAN COLOR - FIXED */}
           <button
             type="submit"
             disabled={loading}
