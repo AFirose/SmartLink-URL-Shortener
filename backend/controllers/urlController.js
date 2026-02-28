@@ -1,97 +1,113 @@
- import Url from "../models/Url.js";
+import Url from "../models/Url.js";
+import crypto from "crypto";
 
-// ===========================================
-// 1. SHORTEN URL
-// ===========================================
+// Generate short code
+const generateShortCode = () => {
+  return crypto.randomBytes(4).toString('hex'); // 8 character code
+};
+
+// @desc    Create short URL
+// @route   POST /api/urls/shorten
 export const shortenUrl = async (req, res) => {
   try {
     const { originalUrl } = req.body;
-    const shortCode = Math.random().toString(36).substring(2, 8);
+
+    if (!originalUrl) {
+      return res.status(400).json({ message: "URL is required" });
+    }
+
+    // Validate URL
+    try {
+      new URL(originalUrl);
+    } catch (err) {
+      return res.status(400).json({ message: "Invalid URL format" });
+    }
+
+    // Check if URL already exists (optional)
+    let url = await Url.findOne({ originalUrl });
     
-    console.log('User from auth:', req.user ? req.user._id : 'No user');
-    
-    const newUrl = new Url({
-      originalUrl,
+    if (url) {
+      return res.json({
+        shortUrl: url.shortUrl,
+        originalUrl: url.originalUrl,
+        id: url.shortUrl
+      });
+    }
+
+    // Generate unique short code
+    let shortCode;
+    let exists = true;
+    while (exists) {
+      shortCode = generateShortCode();
+      exists = await Url.findOne({ shortUrl: shortCode });
+    }
+
+    // Create new short URL
+    url = await Url.create({
       shortUrl: shortCode,
-      user: req.user ? req.user._id : null,
+      originalUrl,
       clicks: 0
     });
 
-    await newUrl.save();
-    console.log('URL saved with user:', newUrl.user);
-    
     res.status(201).json({
-      originalUrl: newUrl.originalUrl,
-      shortUrl: newUrl.shortUrl,
-      clicks: newUrl.clicks,
+      shortUrl: url.shortUrl,
+      originalUrl: url.originalUrl,
+      id: url.shortUrl
     });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ msg: "Server error while shortening URL" });
-  }
-};
 
-// ===========================================
-// 2. GET URL BY SHORT CODE (Redirect)
-// ===========================================
-export const getUrl = async (req, res) => {
-  try {
-    const { id } = req.params;
-    console.log('Looking for shortUrl:', id);
-    
-    const url = await Url.findOne({ shortUrl: id });
-
-    if (!url) {
-      return res.status(404).json({ msg: "URL not found" });
-    }
-
-    // Increment clicks
-    url.clicks += 1;
-    await url.save();
-    
-    console.log('Redirecting to:', url.originalUrl);
-    
-    // Redirect to original URL
-    res.redirect(url.originalUrl);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ msg: "Server error while fetching URL" });
-  }
-};
-
-// ===========================================
-// 3. GET USER'S URLS (Dashboard)
-// ===========================================
-export const getUserUrls = async (req, res) => {
-  try {
-    console.log('Getting URLs for user:', req.user._id);
-    
-    const urls = await Url.find({ user: req.user._id })
-      .sort({ createdAt: -1 });
-    
-    console.log(`Found ${urls.length} URLs for user`);
-    res.json(urls);
   } catch (error) {
-    console.error('Error fetching user URLs:', error);
+    console.error("Shorten error:", error);
     res.status(500).json({ message: error.message });
   }
 };
 
-// ===========================================
-// 4. GET ALL URLS (Admin only)
-// ===========================================
-export const getAllUrls = async (req, res) => {
+// @desc    Redirect to original URL
+// @route   GET /api/urls/:shortCode
+export const getUrl = async (req, res) => {
   try {
-    console.log('Admin fetching all URLs');
+    const { shortCode } = req.params;
     
-    const urls = await Url.find({})
-      .populate('user', 'name email')
+    const url = await Url.findOne({ shortUrl: shortCode });
+
+    if (!url) {
+      return res.status(404).json({ message: "URL not found" });
+    }
+
+    // Increment clicks
+    url.clicks = (url.clicks || 0) + 1;
+    await url.save();
+
+    // Redirect to original URL
+    res.redirect(url.originalUrl);
+  } catch (error) {
+    console.error("Redirect error:", error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Get all URLs for logged-in user
+// @route   GET /api/urls/user/me
+export const getUserUrls = async (req, res) => {
+  try {
+    const urls = await Url.find({ user: req.user._id })
       .sort({ createdAt: -1 });
     
-    console.log(`Found ${urls.length} total URLs`);
     res.json(urls);
   } catch (error) {
-    console.error('Error fetching all URLs:', error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Get all URLs (admin only)
+// @route   GET /api/urls/admin/all
+export const getAllUrls = async (req, res) => {
+  try {
+    const urls = await Url.find({})
+      .populate("user", "name email")
+      .sort({ createdAt: -1 });
+    
+    res.json(urls);
+  } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };

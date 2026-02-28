@@ -1,6 +1,6 @@
- import { useState } from 'react';
+import { useState } from 'react';
 import mobileNavImage from '../assets/images/mobile-navigation.jpg';
- import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 const Navbar = ({ user, setUser }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -17,12 +17,12 @@ const Navbar = ({ user, setUser }) => {
     <nav className="bg-white shadow-lg fixed w-full z-50">
       <div className="container mx-auto px-6 py-4">
         <div className="flex items-center justify-between">
-          {/* Logo */}
+          {/* Logo - Changed from "Shortly" to "SmartLink" */}
           <Link to="/" className="text-2xl font-bold text-primary-cyan">
-            Shortly
+            SmartLink
           </Link>
 
-          {/* Desktop Menu */}
+          {/* Rest of your code remains exactly the same... */}
           <div className="hidden md:flex items-center space-x-8">
             <Link to="/features" className="text-gray-600 hover:text-primary-cyan">
               Features

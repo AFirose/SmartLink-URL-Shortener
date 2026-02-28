@@ -1,14 +1,12 @@
- import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { shortenUrl } from '../services/api';
+import React, { useState } from 'react';
+import axios from 'axios';
 
 const ShortenForm = ({ user }) => {
-  // ✅ All state declarations are here
   const [url, setUrl] = useState('');
-  const [shortenedUrl, setShortenedUrl] = useState('');
+  const [shortUrl, setShortUrl] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const navigate = useNavigate();
+  const [copied, setCopied] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -18,99 +16,143 @@ const ShortenForm = ({ user }) => {
       return;
     }
 
-    // Simple URL validation
+    // Basic URL validation
     try {
       new URL(url);
-    } catch {
-      setError('Please enter a valid URL (include https://)');
+    } catch (err) {
+      setError('Please enter a valid URL (include http:// or https://)');
       return;
     }
 
+    setLoading(true);
+    setError('');
+    setShortUrl('');
+    setCopied(false);
+
     try {
-      setLoading(true);
-      setError('');
+      const response = await axios.post(
+        'http://localhost:5000/api/urls/shorten',
+        { originalUrl: url }
+      );
+
+      const baseUrl = 'http://localhost:5000';
+      const fullShortUrl = `${baseUrl}/api/urls/${response.data.shortUrl || response.data.id}`;
       
-      console.log('User logged in:', user ? 'Yes' : 'No');
-      console.log('User data:', user);
-      
-      const { data } = await shortenUrl(url);
-      console.log('Shorten response:', data);
-      
-      setShortenedUrl(`http://localhost:5000/api/url/${data.shortUrl}`);
+      setShortUrl(fullShortUrl);
       setUrl('');
-      
-      // If user is logged in, redirect to dashboard
-      if (user) {
-        alert('URL shortened and saved to your account!');
-        setTimeout(() => {
-          navigate('/dashboard');
-        }, 1500);
-      }
     } catch (err) {
-      console.error('Error:', err);
-      setError(err.response?.data?.msg || 'Failed to shorten URL');
+      console.error('Shorten error:', err);
+      setError(err.response?.data?.message || 'Failed to shorten URL. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
   const copyToClipboard = () => {
-    navigator.clipboard.writeText(shortenedUrl);
-    alert('Copied to clipboard!');
+    navigator.clipboard.writeText(shortUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter' && !loading) {
+      handleSubmit(e);
+    }
   };
 
   return (
-    <section className="relative -mt-20 px-6">
-      <div className="container mx-auto">
-        <div className="bg-primary-dark-violet bg-cover bg-no-repeat p-8 md:p-12 rounded-lg">
-          <form onSubmit={handleSubmit} className="flex flex-col md:flex-row gap-4">
-            <div className="flex-1">
-              <input
-                type="url"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                placeholder="Shorten a link here..."
-                className={`w-full px-6 py-4 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 ${
-                  error ? 'ring-2 ring-red-500' : 'focus:ring-blue-500'
-                }`}
-              />
-              {error && <p className="text-red-400 text-sm mt-2 italic">{error}</p>}
-            </div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="bg-blue-500 text-white px-8 py-4 rounded-lg font-bold hover:bg-blue-600 transition disabled:opacity-50 whitespace-nowrap"
-            >
-              {loading ? 'Shortening...' : 'Shorten It!'}
-            </button>
-          </form>
-
-          {shortenedUrl && (
-            <div className="mt-6 bg-white p-4 rounded-lg flex flex-col md:flex-row items-center justify-between gap-4">
-              <p className="text-gray-900 break-all">{shortenedUrl}</p>
-              <button
-                onClick={copyToClipboard}
-                className="bg-blue-500 text-white px-6 py-2 rounded-lg hover:bg-blue-600 transition whitespace-nowrap"
-              >
-                Copy
-              </button>
-            </div>
-          )}
-
-          {user && shortenedUrl && (
-            <p className="text-white text-center mt-4">
-              ✨ Link saved to your dashboard! Redirecting...
-            </p>
-          )}
-
-          {!user && shortenedUrl && (
-            <p className="text-white text-center mt-4">
-              <a href="/register" className="underline font-bold">Sign up</a> to save your links permanently!
-            </p>
-          )}
+    <div className="bg-white rounded-lg shadow-xl p-8 max-w-3xl mx-auto -mt-16 relative z-10">
+      <h2 className="text-2xl font-bold text-center mb-6 text-gray-800">
+        Shorten a long link
+      </h2>
+      
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="flex flex-col md:flex-row gap-4">
+          <input
+            type="url"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            onKeyPress={handleKeyPress}
+            placeholder="Enter your long URL here..."
+            className="flex-1 px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition"
+            disabled={loading}
+            autoFocus
+          />
+          
+          {/* BUTTON WITH CYAN COLOR - FIXED */}
+          <button
+            type="submit"
+            disabled={loading}
+            className="bg-cyan-500 text-white px-8 py-3 rounded-lg hover:bg-cyan-600 transition disabled:opacity-50 disabled:cursor-not-allowed font-semibold shadow-md hover:shadow-lg"
+          >
+            {loading ? (
+              <span className="flex items-center justify-center">
+                <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Shortening...
+              </span>
+            ) : (
+              'Shorten URL'
+            )}
+          </button>
         </div>
-      </div>
-    </section>
+
+        {error && (
+          <div className="bg-red-50 border-l-4 border-red-500 p-4 mt-2">
+            <p className="text-red-700 text-sm">{error}</p>
+          </div>
+        )}
+      </form>
+
+      {shortUrl && (
+        <div className="mt-8 p-6 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border-2 border-green-200">
+          <p className="text-sm font-semibold text-green-800 mb-3 flex items-center">
+            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+            Your shortened URL is ready!
+          </p>
+          
+          <div className="flex flex-col sm:flex-row items-center gap-3">
+            <a 
+              href={shortUrl} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="text-cyan-600 hover:text-cyan-700 font-medium flex-1 truncate bg-white px-4 py-2 rounded-lg border border-gray-200 hover:border-cyan-500 transition"
+            >
+              {shortUrl}
+            </a>
+            
+            <button
+              onClick={copyToClipboard}
+              className={`px-6 py-2 rounded-lg font-medium transition flex items-center justify-center min-w-[100px] ${
+                copied 
+                  ? 'bg-green-500 text-white' 
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              {copied ? (
+                <>
+                  <svg className="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  Copied!
+                </>
+              ) : (
+                <>
+                  <svg className="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                  </svg>
+                  Copy
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 };
 
