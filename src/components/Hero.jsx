@@ -1,6 +1,5 @@
  // Boost backgrounds
 import boostDesktop from "../assets/images/bg-boost-desktop.svg";
-import boostMobile from "../assets/images/bg-boost-mobile.svg";
 
 // Shorten backgrounds
 import shortenDesktop from "../assets/images/bg-shorten-desktop.svg";
